@@ -2,8 +2,7 @@
 name: 需求反馈
 about: 期望新增或改进实现的需求
 title: ''
-labels: Pending
-assignees: debugtalk
+labels: pending
 ---
 
 ## 背景描述

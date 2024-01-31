@@ -5,14 +5,11 @@ import sys
 
 import pytest
 from loguru import logger
-from sentry_sdk import capture_message
 
 from httprunner import __description__, __version__
 from httprunner.compat import ensure_cli_args
-from httprunner.ext.har2case import init_har2case_parser, main_har2case
 from httprunner.make import init_make_parser, main_make
-from httprunner.scaffold import init_parser_scaffold, main_scaffold
-from httprunner.utils import init_sentry_sdk
+from httprunner.utils import ga4_client, init_logger, init_sentry_sdk
 
 init_sentry_sdk()
 
@@ -25,7 +22,7 @@ def init_parser_run(subparsers):
 
 
 def main_run(extra_args) -> enum.IntEnum:
-    capture_message("start to run")
+    ga4_client.send_event("hrun")
     # keep compatibility with v2
     extra_args = ensure_cli_args(extra_args)
 
@@ -58,17 +55,14 @@ def main_run(extra_args) -> enum.IntEnum:
 
 
 def main():
-    """ API test: parse command line options and run commands.
-    """
+    """API test: parse command line options and run commands."""
     parser = argparse.ArgumentParser(description=__description__)
     parser.add_argument(
         "-V", "--version", dest="version", action="store_true", help="show version"
     )
 
     subparsers = parser.add_subparsers(help="sub-command help")
-    sub_parser_run = init_parser_run(subparsers)
-    sub_parser_scaffold = init_parser_scaffold(subparsers)
-    sub_parser_har2case = init_har2case_parser(subparsers)
+    init_parser_run(subparsers)
     sub_parser_make = init_make_parser(subparsers)
 
     if len(sys.argv) == 1:
@@ -83,12 +77,6 @@ def main():
         elif sys.argv[1] in ["-h", "--help"]:
             # httprunner -h
             parser.print_help()
-        elif sys.argv[1] == "startproject":
-            # httprunner startproject
-            sub_parser_scaffold.print_help()
-        elif sys.argv[1] == "har2case":
-            # httprunner har2case
-            sub_parser_har2case.print_help()
         elif sys.argv[1] == "run":
             # httprunner run
             pytest.main(["-h"])
@@ -104,7 +92,7 @@ def main():
         sys.exit(0)
 
     extra_args = []
-    if len(sys.argv) >= 2 and sys.argv[1] in ["run", "locusts"]:
+    if len(sys.argv) >= 2 and sys.argv[1] in ["run"]:
         args, extra_args = parser.parse_known_args()
     else:
         args = parser.parse_args()
@@ -113,19 +101,28 @@ def main():
         print(f"{__version__}")
         sys.exit(0)
 
+    # set log level
+    try:
+        index = extra_args.index("--log-level")
+        if index < len(extra_args) - 1:
+            level = extra_args[index + 1]
+        else:
+            # not specify log level value
+            level = "INFO"  # default
+    except ValueError:
+        level = "INFO"  # default
+
+    init_logger(level)
+
     if sys.argv[1] == "run":
         sys.exit(main_run(extra_args))
-    elif sys.argv[1] == "startproject":
-        main_scaffold(args)
-    elif sys.argv[1] == "har2case":
-        main_har2case(args)
     elif sys.argv[1] == "make":
         main_make(args.testcase_path)
 
 
 def main_hrun_alias():
-    """ command alias
-        hrun = httprunner run
+    """command alias
+    hrun = httprunner run
     """
     if len(sys.argv) == 2:
         if sys.argv[1] in ["-V", "--version"]:
@@ -144,18 +141,10 @@ def main_hrun_alias():
 
 
 def main_make_alias():
-    """ command alias
-        hmake = httprunner make
+    """command alias
+    hmake = httprunner make
     """
     sys.argv.insert(1, "make")
-    main()
-
-
-def main_har2case_alias():
-    """ command alias
-        har2case = httprunner har2case
-    """
-    sys.argv.insert(1, "har2case")
     main()
 
 
